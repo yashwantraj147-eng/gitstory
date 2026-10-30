@@ -12,6 +12,7 @@ import {
   Check,
   Calendar,
   Layers,
+  Sparkles,
 } from "lucide-react";
 import { RepoStoryPayload } from "@/lib/analytics/types";
 import { Button } from "@/components/ui/button";
@@ -21,9 +22,10 @@ interface StoryHeaderProps {
   story: RepoStoryPayload;
   onOpenExportModal: () => void;
   onDownloadJson: () => void;
+  onOpenWrappedModal: () => void;
 }
 
-export function StoryHeader({ story, onOpenExportModal, onDownloadJson }: StoryHeaderProps) {
+export function StoryHeader({ story, onOpenExportModal, onDownloadJson, onOpenWrappedModal }: StoryHeaderProps) {
   const { repo, metrics, isSampled } = story;
   const [copied, setCopied] = useState(false);
 
@@ -113,6 +115,16 @@ export function StoryHeader({ story, onOpenExportModal, onDownloadJson }: StoryH
 
         {/* Action buttons */}
         <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5">
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={onOpenWrappedModal}
+            className="flex-1 sm:flex-none bg-gradient-to-r from-purple-600 via-brand-500 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-lg shadow-purple-500/20 font-semibold"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+            <span>Launch Wrapped 🎉</span>
+          </Button>
+
           <Button
             variant="outline"
             size="sm"

@@ -19,6 +19,7 @@ import { ActivityHeatmap } from "@/components/story/ActivityHeatmap";
 import { LanguageBreakdown } from "@/components/story/LanguageBreakdown";
 import { MilestoneBadges } from "@/components/story/MilestoneBadges";
 import { ExportModal } from "@/components/story/ExportModal";
+import { StoryWrappedModal } from "@/components/story/StoryWrappedModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 
@@ -33,6 +34,7 @@ export default function StoryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<{ message: string; type?: string; resetAt?: string } | null>(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isWrappedModalOpen, setIsWrappedModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const fetchStory = async (refresh = false) => {
@@ -201,6 +203,7 @@ export default function StoryPage() {
         story={story}
         onOpenExportModal={() => setIsExportModalOpen(true)}
         onDownloadJson={handleDownloadJson}
+        onOpenWrappedModal={() => setIsWrappedModalOpen(true)}
       />
 
       {/* 2. AI / Template Narrative Reader */}
@@ -232,6 +235,14 @@ export default function StoryPage() {
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
         story={story}
+      />
+
+      {/* Spotify Wrapped Story Recap Mode */}
+      <StoryWrappedModal
+        isOpen={isWrappedModalOpen}
+        onClose={() => setIsWrappedModalOpen(false)}
+        story={story}
+        onOpenExportCard={() => setIsExportModalOpen(true)}
       />
     </div>
   );
