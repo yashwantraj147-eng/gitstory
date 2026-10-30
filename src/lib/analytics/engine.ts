@@ -106,3 +106,4 @@ export function generateRepoStory(bundle: RawRepoBundle): RepoStoryPayload {
     generatedAt: new Date().toISOString(),
   };
 }
+

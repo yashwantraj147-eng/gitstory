@@ -145,3 +145,4 @@ export function computeHeatmap(commits: GitHubCommitSimple[]): HeatmapData {
     currentStreakDays: currentStreak,
   };
 }
+

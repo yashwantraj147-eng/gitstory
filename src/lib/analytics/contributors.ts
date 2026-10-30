@@ -98,7 +98,7 @@ export function computeContributorTimeline(
   for (const period of periods) {
     const monthMap = monthlyBuckets.get(period)!;
 
-    for (const [author, count] of monthMap.entries()) {
+    for (const [author, count] of Array.from(monthMap.entries())) {
       if (topLogins.has(author)) {
         cumulativeCounts.set(author, (cumulativeCounts.get(author) || 0) + count);
       }

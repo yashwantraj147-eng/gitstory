@@ -16,3 +16,4 @@ export interface NarrativeProvider {
   name: string;
   generateNarrative(context: NarrativeContext, tone?: NarrativeTone): Promise<StoryNarrative>;
 }
+

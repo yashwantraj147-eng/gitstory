@@ -40,7 +40,7 @@ export class MemoryCache {
       let oldestKey: string | null = null;
       let oldestAccess = Infinity;
 
-      for (const [k, v] of this.cache.entries()) {
+      for (const [k, v] of Array.from(this.cache.entries())) {
         if (v.lastAccessed < oldestAccess) {
           oldestAccess = v.lastAccessed;
           oldestKey = k;

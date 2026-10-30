@@ -65,3 +65,4 @@ describe("Heatmap Computation", () => {
     expect(result.maxDailyCommits).toBe(1);
   });
 });
+

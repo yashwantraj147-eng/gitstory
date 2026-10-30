@@ -56,3 +56,4 @@ export function computeLanguages(rawLanguages: GitHubLanguages): LanguageBreakdo
     totalBytes,
   };
 }
+

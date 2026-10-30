@@ -119,3 +119,4 @@ export interface RepoStoryPayload {
   isSampled: boolean;
   generatedAt: string;
 }
+
