@@ -144,6 +144,7 @@ export function ContributorRace({ timeline }: ContributorRaceProps) {
                 variant="outline"
                 size="sm"
                 onClick={handleReset}
+                disabled={buckets.length <= 1}
                 title="Reset to beginning"
                 aria-label="Reset contributor race to start"
                 className="p-2"
@@ -155,6 +156,7 @@ export function ContributorRace({ timeline }: ContributorRaceProps) {
                 variant="primary"
                 size="sm"
                 onClick={handlePlayToggle}
+                disabled={buckets.length <= 1}
                 className="px-4 font-semibold"
               >
                 {isPlaying ? (
@@ -164,16 +166,17 @@ export function ContributorRace({ timeline }: ContributorRaceProps) {
                 ) : (
                   <>
                     <Play className="w-3.5 h-3.5 mr-1" />{" "}
-                    {currentIndex >= buckets.length - 1 ? "Replay" : "Play Race"}
+                    {currentIndex >= buckets.length - 1 && buckets.length > 1 ? "Replay" : "Play Race"}
                   </>
                 )}
               </Button>
 
               <button
                 type="button"
+                disabled={buckets.length <= 1}
                 onClick={() => setPlaybackSpeed((s) => (s === 1 ? 2 : s === 2 ? 4 : 1))}
                 aria-label={`Change playback speed, currently ${playbackSpeed}x`}
-                className="px-2.5 py-1 rounded-lg bg-slate-800 text-xs font-mono font-bold text-slate-300 hover:text-white border border-slate-700"
+                className="px-2.5 py-1 rounded-lg bg-slate-800 text-xs font-mono font-bold text-slate-300 hover:text-white border border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {playbackSpeed}x
               </button>
@@ -201,12 +204,13 @@ export function ContributorRace({ timeline }: ContributorRaceProps) {
                   min={0}
                   max={Math.max(0, buckets.length - 1)}
                   value={currentIndex}
+                  disabled={buckets.length <= 1}
                   aria-label="Scrub contributor race timeline month"
                   onChange={(e) => {
                     setIsPlaying(false);
                     setCurrentIndex(parseInt(e.target.value, 10));
                   }}
-                  className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-brand-500"
+                  className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-brand-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
                 <div className="flex justify-between text-[11px] font-mono text-slate-500">
                   <span>{periods[0]}</span>

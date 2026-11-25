@@ -3,15 +3,47 @@ import "./globals.css";
 import { Navbar } from "@/components/common/Navbar";
 import { Footer } from "@/components/common/Footer";
 
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+
 export const metadata: Metadata = {
-  title: "GitStory — Turn any GitHub Repo into an Interactive Historical Narrative",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "GitStory — Turn any GitHub Repo into an Interactive Historical Narrative",
+    template: "%s — GitStory",
+  },
   description:
     "Generate animated timelines, contributor race charts, activity heatmaps, and AI-crafted narratives from any public GitHub repository URL.",
-  keywords: ["GitHub", "Git", "visualizer", "timeline", "analytics", "commit history", "developer portfolio"],
+  keywords: [
+    "GitHub",
+    "Git",
+    "visualizer",
+    "timeline",
+    "analytics",
+    "commit history",
+    "developer portfolio",
+  ],
   openGraph: {
     title: "GitStory — Visual Repo Biographies",
-    description: "Generate animated timelines, contributor race charts, and AI narratives from any GitHub repo.",
+    description:
+      "Generate animated timelines, contributor race charts, and AI narratives from any GitHub repo.",
     type: "website",
+    images: [
+      {
+        url: "/demo-preview.png",
+        width: 1200,
+        height: 630,
+        alt: "GitStory Interactive Repository Story Preview",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "GitStory — Visual Repo Biographies",
+    description:
+      "Turn any public GitHub repository into an interactive historical story with timelines, race charts, and heatmaps.",
+    images: ["/demo-preview.png"],
   },
 };
 
@@ -32,4 +64,3 @@ export default function RootLayout({
     </html>
   );
 }
-

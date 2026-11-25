@@ -160,7 +160,7 @@ export function ActivityHeatmap({ heatmap }: ActivityHeatmapProps) {
                   </span>
                 ) : (
                   <span className="text-slate-500">
-                    Hover or focus any day to inspect commit count ({heatmap.calendarWindowLabel || "Last 52 weeks"})
+                    {heatmap.calendarDays[0]?.date} → {heatmap.calendarDays[heatmap.calendarDays.length - 1]?.date} • Hover or focus any day
                   </span>
                 )}
               </div>
