@@ -29,7 +29,7 @@ describe("Milestone Detection", () => {
     {
       sha: "commit-3-wake",
       message: "Resuming after a break",
-      date: "2023-02-15T15:00:00Z", // 41 days after commit 2
+      date: "2023-02-15T15:00:00Z",
       authorName: "Alice",
       authorLogin: "alice",
       authorAvatar: null,
@@ -102,9 +102,41 @@ describe("Milestone Detection", () => {
     expect(v1Rel?.title).toContain("Version 1.0");
   });
 
+  it("uses explicit genesisCommit and suppresses misleading index milestones when sampled", () => {
+    const manyCommits: GitHubCommitSimple[] = Array.from({ length: 120 }, (_, i) => ({
+      sha: `recent-${i}`,
+      message: `Commit ${i}`,
+      date: new Date(Date.UTC(2025, 0, 1 + i)).toISOString(),
+      authorName: `Author${i % 15}`,
+      authorLogin: `author${i % 15}`,
+      authorAvatar: null,
+    }));
+
+    const trueGenesis: GitHubCommitSimple = {
+      sha: "true001genesis",
+      message: "True origin commit",
+      date: "2018-05-01T00:00:00Z",
+      authorName: "Founder",
+      authorLogin: "founder",
+      authorAvatar: null,
+    };
+
+    const milestones = detectMilestones(manyCommits, [], {
+      isSampled: true,
+      genesisCommit: trueGenesis,
+      totalCommitCountEstimate: 5000,
+    });
+
+    const genesis = milestones.find((m) => m.type === "genesis");
+    expect(genesis?.date).toBe("2018-05-01T00:00:00Z");
+    expect(genesis?.metadata?.sha).toBe("true001");
+    expect(milestones.find((m) => m.type === "century")).toBeUndefined();
+    expect(milestones.find((m) => m.type === "contributor_boom")).toBeUndefined();
+    expect(milestones.find((m) => m.type === "slumber")).toBeUndefined();
+  });
+
   it("handles empty commits gracefully without errors", () => {
     const milestones = detectMilestones([], []);
     expect(milestones).toEqual([]);
   });
 });
-

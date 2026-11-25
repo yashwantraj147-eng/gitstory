@@ -30,7 +30,8 @@ Thank you for your interest in contributing to GitStory! We welcome bug fixes, v
 ## Code Quality & Standards
 
 - **Strict TypeScript:** No `any` types. Ensure all models and metrics are strongly typed.
-- **Testing:** Run `npm run test` to verify unit tests for analytics and milestone algorithms.
+- **Linting:** Run `npm run lint` to verify zero ESLint warnings or errors.
+- **Testing:** Run `npm run test` (and `npm run test:coverage`) to verify unit tests for analytics and milestone algorithms.
 - **Type Checking:** Run `npm run typecheck` (`tsc --noEmit`) to verify strict type safety.
 - **Conventional Commits:** Use standard conventional commit prefixes (`feat:`, `fix:`, `docs:`, `chore:`, `test:`).
 
@@ -38,6 +39,6 @@ Thank you for your interest in contributing to GitStory! We welcome bug fixes, v
 
 1. Create a feature branch: `git checkout -b feat/my-new-visualization`
 2. Write clean code with accompanying tests.
-3. Verify `npm run test` and `npm run typecheck` both pass.
+3. Verify `npm run lint`, `npm run test`, and `npm run typecheck` all pass.
 4. Open a pull request targeting the `main` branch.
 

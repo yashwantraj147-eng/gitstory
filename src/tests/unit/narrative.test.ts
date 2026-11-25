@@ -33,6 +33,7 @@ describe("Narrative Engine & Fallback", () => {
       lifespanDays: 1360,
       lifespanFormatted: "3 yr, 8 mo",
       totalCommitsAnalyzed: 850,
+      totalCommitCountEstimate: 850,
       commitVelocityPerMonth: 18.5,
       nightOwlPercentage: 35,
       weekendHackerPercentage: 28,
@@ -65,6 +66,7 @@ describe("Narrative Engine & Fallback", () => {
     contributors: {
       periods: ["2020-04", "2020-05"],
       buckets: [],
+      growthSeries: [],
       topContributors: [
         {
           login: "founder",

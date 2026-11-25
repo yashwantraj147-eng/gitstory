@@ -4,8 +4,12 @@ import { MemoryCache } from "@/lib/github/cache";
 import { RateLimitError, RepoNotFoundError, EmptyRepoError } from "@/lib/github/client";
 
 describe("GitHub URL Parser", () => {
-  it("parses full HTTPS URLs", () => {
+  it("parses full HTTPS URLs and strips query/hash fragments", () => {
     expect(parseRepoInput("https://github.com/facebook/react")).toEqual({
+      owner: "facebook",
+      repo: "react",
+    });
+    expect(parseRepoInput("https://www.github.com/facebook/react?tab=readme-ov-file#react")).toEqual({
       owner: "facebook",
       repo: "react",
     });
@@ -32,10 +36,12 @@ describe("GitHub URL Parser", () => {
     });
   });
 
-  it("returns null for invalid inputs", () => {
+  it("returns null for invalid inputs and external hosts", () => {
     expect(parseRepoInput("")).toBeNull();
     expect(parseRepoInput("just-a-word")).toBeNull();
-    expect(parseRepoInput("https://gitlab.com/invalid")).toBeNull();
+    expect(parseRepoInput("https://gitlab.com/invalid/repo")).toBeNull();
+    expect(parseRepoInput("https://gist.github.com/user/12345")).toBeNull();
+    expect(parseRepoInput("https://github.com/../repo")).toBeNull();
   });
 });
 
@@ -59,7 +65,7 @@ describe("MemoryCache", () => {
     const cache = new MemoryCache({ maxItems: 2 });
     cache.set("a", 1);
     cache.set("b", 2);
-    cache.set("c", 3); // should evict 'a'
+    cache.set("c", 3);
 
     expect(cache.get("a")).toBeNull();
     expect(cache.get("b")).toBe(2);
@@ -86,4 +92,3 @@ describe("GitHub Error Classes", () => {
     expect(error.status).toBe(400);
   });
 });
-
