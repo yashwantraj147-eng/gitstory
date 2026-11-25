@@ -78,7 +78,6 @@ export class MemoryCache {
 
 // Global cache singleton across Next.js API invocations
 declare global {
-  // eslint-disable-next-line no-var
   var __gitstory_cache: MemoryCache | undefined;
 }
 

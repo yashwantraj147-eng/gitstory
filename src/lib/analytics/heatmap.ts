@@ -2,15 +2,21 @@ import { GitHubCommitSimple } from "../github/types";
 import { HeatmapData, PunchcardCell, CalendarDay } from "./types";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export function computeHeatmap(commits: GitHubCommitSimple[]): HeatmapData {
   // Initialize 7x24 = 168 punchcard grid
   const punchcardGrid: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0));
   const dailyCounts: Map<string, number> = new Map();
+  let latestCommitMs = 0;
 
   for (const c of commits) {
     const d = new Date(c.date);
     if (isNaN(d.getTime())) continue;
+
+    if (d.getTime() > latestCommitMs) {
+      latestCommitMs = d.getTime();
+    }
 
     const day = d.getUTCDay();
     const hour = d.getUTCHours();
@@ -50,15 +56,23 @@ export function computeHeatmap(commits: GitHubCommitSimple[]): HeatmapData {
     }
   }
 
-  // Generate 52-week calendar grid (past 365 days up to today or latest commit)
+  // Anchor 52-week calendar window: use `now` for active repos, or latest commit date if archived > 365 days ago
   const now = new Date();
+  const isArchivedWindow = latestCommitMs > 0 && now.getTime() - latestCommitMs > 365 * MS_PER_DAY;
+  const anchorEnd = isArchivedWindow ? new Date(latestCommitMs) : now;
+  const calendarWindowLabel = isArchivedWindow
+    ? `Final active 52 weeks (ended ${anchorEnd.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+      })})`
+    : "Last 52 weeks";
+
   const calendarDays: CalendarDay[] = [];
   let maxDaily = 0;
   const nonZeroCounts: number[] = [];
 
-  // Generate 365 days
   for (let i = 364; i >= 0; i--) {
-    const target = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+    const target = new Date(anchorEnd.getTime() - i * MS_PER_DAY);
     const dateKey = target.toISOString().split("T")[0];
     const count = dailyCounts.get(dateKey) || 0;
 
@@ -73,11 +87,14 @@ export function computeHeatmap(commits: GitHubCommitSimple[]): HeatmapData {
   // Calculate quartiles for GitHub-style levels (0-4)
   nonZeroCounts.sort((a, b) => a - b);
   const q1 = nonZeroCounts.length > 0 ? nonZeroCounts[Math.floor(nonZeroCounts.length * 0.25)] || 1 : 1;
-  const q2 = nonZeroCounts.length > 0 ? nonZeroCounts[Math.floor(nonZeroCounts.length * 0.50)] || 2 : 2;
+  const q2 = nonZeroCounts.length > 0 ? nonZeroCounts[Math.floor(nonZeroCounts.length * 0.5)] || 2 : 2;
   const q3 = nonZeroCounts.length > 0 ? nonZeroCounts[Math.floor(nonZeroCounts.length * 0.75)] || 4 : 4;
 
+  const firstCalendarDate = new Date(anchorEnd.getTime() - 364 * MS_PER_DAY);
+  const startDayOfWeek = firstCalendarDate.getUTCDay();
+
   for (let i = 364; i >= 0; i--) {
-    const target = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+    const target = new Date(anchorEnd.getTime() - i * MS_PER_DAY);
     const dateKey = target.toISOString().split("T")[0];
     const count = dailyCounts.get(dateKey) || 0;
 
@@ -96,7 +113,7 @@ export function computeHeatmap(commits: GitHubCommitSimple[]): HeatmapData {
     });
   }
 
-  // Compute streaks
+  // Compute streaks across UTC dates
   const sortedDates = Array.from(dailyCounts.keys()).sort();
   let longestStreak = 0;
   let currentStreak = 0;
@@ -106,9 +123,9 @@ export function computeHeatmap(commits: GitHubCommitSimple[]): HeatmapData {
     if (i === 0) {
       tempStreak = 1;
     } else {
-      const prev = new Date(sortedDates[i - 1]).getTime();
-      const curr = new Date(sortedDates[i]).getTime();
-      const diffDays = Math.round((curr - prev) / (1000 * 60 * 60 * 24));
+      const prev = Date.parse(`${sortedDates[i - 1]}T00:00:00Z`);
+      const curr = Date.parse(`${sortedDates[i]}T00:00:00Z`);
+      const diffDays = Math.round((curr - prev) / MS_PER_DAY);
 
       if (diffDays === 1) {
         tempStreak++;
@@ -123,12 +140,12 @@ export function computeHeatmap(commits: GitHubCommitSimple[]): HeatmapData {
 
   // Calculate active current streak leading up to today/yesterday
   const todayStr = now.toISOString().split("T")[0];
-  const yesterdayStr = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const yesterdayStr = new Date(now.getTime() - MS_PER_DAY).toISOString().split("T")[0];
   if (dailyCounts.has(todayStr) || dailyCounts.has(yesterdayStr)) {
-    let checkDate = dailyCounts.has(todayStr) ? now : new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    let checkDate = dailyCounts.has(todayStr) ? now : new Date(now.getTime() - MS_PER_DAY);
     while (dailyCounts.has(checkDate.toISOString().split("T")[0])) {
       currentStreak++;
-      checkDate = new Date(checkDate.getTime() - 24 * 60 * 60 * 1000);
+      checkDate = new Date(checkDate.getTime() - MS_PER_DAY);
     }
   }
 
@@ -139,10 +156,11 @@ export function computeHeatmap(commits: GitHubCommitSimple[]): HeatmapData {
     peakHour,
     peakHourLabel: `${peakHour.toString().padStart(2, "0")}:00 UTC`,
     calendarDays,
+    calendarWindowLabel,
+    startDayOfWeek,
     maxDailyCommits: maxDaily,
     totalActiveDays: dailyCounts.size,
     longestStreakDays: longestStreak,
     currentStreakDays: currentStreak,
   };
 }
-

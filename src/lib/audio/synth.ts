@@ -8,24 +8,32 @@ class SoundEngine {
   private isMuted: boolean = false;
   private bgmGain: GainNode | null = null;
   private isBgmPlaying: boolean = false;
-  private bgmInterval: NodeJS.Timeout | null = null;
+  private bgmInterval: ReturnType<typeof setInterval> | null = null;
+  private celebrateTimers: ReturnType<typeof setTimeout>[] = [];
 
-  private initCtx() {
+  private async ensureCtx(): Promise<AudioContext | null> {
     if (!this.ctx && typeof window !== "undefined") {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (AudioCtx) {
         this.ctx = new AudioCtx();
       }
     }
     if (this.ctx && this.ctx.state === "suspended") {
-      this.ctx.resume();
+      try {
+        await this.ctx.resume();
+      } catch {
+        return null;
+      }
     }
+    return this.ctx;
   }
 
   setMuted(muted: boolean) {
     this.isMuted = muted;
-    if (this.bgmGain) {
-      this.bgmGain.gain.value = muted ? 0 : 0.08;
+    if (this.bgmGain && this.ctx) {
+      this.bgmGain.gain.setTargetAtTime(muted ? 0 : 0.07, this.ctx.currentTime, 0.05);
     }
   }
 
@@ -33,136 +41,146 @@ class SoundEngine {
     return this.isMuted;
   }
 
-  playBeep(frequency = 440, type: OscillatorType = "sine", duration = 0.15) {
+  async playBeep(frequency = 440, type: OscillatorType = "sine", duration = 0.15) {
     if (this.isMuted) return;
-    this.initCtx();
-    if (!this.ctx) return;
+    const ctx = await this.ensureCtx();
+    if (!ctx) return;
 
     try {
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
 
       osc.type = type;
-      osc.frequency.setValueAtTime(frequency, this.ctx.currentTime);
+      osc.frequency.setValueAtTime(frequency, ctx.currentTime);
 
-      gain.gain.setValueAtTime(0.05, this.ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + duration);
+      gain.gain.setValueAtTime(0.05, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
 
       osc.connect(gain);
-      gain.connect(this.ctx.destination);
+      gain.connect(ctx.destination);
 
       osc.start();
-      osc.stop(this.ctx.currentTime + duration);
+      osc.stop(ctx.currentTime + duration);
     } catch {
-      // Ignore audio errors
+      // Ignore audio errors when autoplay is blocked
     }
   }
 
   playCelebrate() {
     if (this.isMuted) return;
-    this.initCtx();
-    // Play celebratory chord arpeggio: C5 -> E5 -> G5 -> C6
+    this.clearCelebrateTimers();
     const notes = [523.25, 659.25, 783.99, 1046.5];
     notes.forEach((freq, idx) => {
-      setTimeout(() => {
-        this.playBeep(freq, "triangle", 0.3);
+      const timer = setTimeout(() => {
+        void this.playBeep(freq, "triangle", 0.3);
       }, idx * 70);
+      this.celebrateTimers.push(timer);
     });
   }
 
   playSlideTransition() {
     if (this.isMuted) return;
-    this.initCtx();
-    this.playBeep(330, "sine", 0.1);
+    void this.playBeep(330, "sine", 0.1);
   }
 
-  startBgm() {
+  private clearCelebrateTimers() {
+    for (const timer of this.celebrateTimers) {
+      clearTimeout(timer);
+    }
+    this.celebrateTimers = [];
+  }
+
+  async startBgm() {
     if (this.isBgmPlaying) return;
-    this.initCtx();
-    if (!this.ctx) return;
+    this.isBgmPlaying = true;
+    const ctx = await this.ensureCtx();
+    if (!ctx || !this.isBgmPlaying) return;
 
     try {
-      this.isBgmPlaying = true;
-      this.bgmGain = this.ctx.createGain();
-      this.bgmGain.gain.value = this.isMuted ? 0 : 0.07;
-      this.bgmGain.connect(this.ctx.destination);
+      const gainNode = ctx.createGain();
+      gainNode.gain.value = this.isMuted ? 0 : 0.07;
+      gainNode.connect(ctx.destination);
+      this.bgmGain = gainNode;
 
-      // Synthwave chord progression: Am -> F -> C -> G
       const chords = [
-        [220, 261.63, 329.63], // A minor
-        [174.61, 220, 261.63], // F major
-        [261.63, 329.63, 392], // C major
-        [196, 246.94, 293.66], // G major
+        [220, 261.63, 329.63], // Am
+        [174.61, 220, 261.63], // F
+        [261.63, 329.63, 392], // C
+        [196, 246.94, 293.66], // G
       ];
 
       let chordIndex = 0;
 
       const playChord = () => {
         if (!this.isBgmPlaying || !this.ctx || !this.bgmGain) return;
+        const activeCtx = this.ctx;
+        const masterGain = this.bgmGain;
 
         const currentNotes = chords[chordIndex % chords.length];
         chordIndex++;
 
-        // Low bass pulse
-        const bassOsc = this.ctx.createOscillator();
-        const bassGain = this.ctx.createGain();
+        const bassOsc = activeCtx.createOscillator();
+        const bassGain = activeCtx.createGain();
         bassOsc.type = "sawtooth";
-        bassOsc.frequency.setValueAtTime(currentNotes[0] / 2, this.ctx.currentTime);
+        bassOsc.frequency.setValueAtTime(currentNotes[0] / 2, activeCtx.currentTime);
 
-        const filter = this.ctx.createBiquadFilter();
+        const filter = activeCtx.createBiquadFilter();
         filter.type = "lowpass";
-        filter.frequency.setValueAtTime(350, this.ctx.currentTime);
+        filter.frequency.setValueAtTime(350, activeCtx.currentTime);
 
-        bassGain.gain.setValueAtTime(0.04, this.ctx.currentTime);
-        bassGain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 1.2);
+        bassGain.gain.setValueAtTime(0.04, activeCtx.currentTime);
+        bassGain.gain.exponentialRampToValueAtTime(0.001, activeCtx.currentTime + 1.2);
 
         bassOsc.connect(filter);
         filter.connect(bassGain);
-        bassGain.connect(this.bgmGain);
+        bassGain.connect(masterGain);
 
         bassOsc.start();
-        bassOsc.stop(this.ctx.currentTime + 1.2);
+        bassOsc.stop(activeCtx.currentTime + 1.2);
 
-        // Soft pad notes
         currentNotes.forEach((freq) => {
-          if (!this.ctx || !this.bgmGain) return;
-          const padOsc = this.ctx.createOscillator();
-          const padGain = this.ctx.createGain();
+          const padOsc = activeCtx.createOscillator();
+          const padGain = activeCtx.createGain();
 
           padOsc.type = "sine";
-          padOsc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+          padOsc.frequency.setValueAtTime(freq, activeCtx.currentTime);
 
-          padGain.gain.setValueAtTime(0.02, this.ctx.currentTime);
-          padGain.gain.linearRampToValueAtTime(0.04, this.ctx.currentTime + 0.3);
-          padGain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 1.3);
+          padGain.gain.setValueAtTime(0.02, activeCtx.currentTime);
+          padGain.gain.linearRampToValueAtTime(0.04, activeCtx.currentTime + 0.3);
+          padGain.gain.exponentialRampToValueAtTime(0.001, activeCtx.currentTime + 1.3);
 
           padOsc.connect(padGain);
-          padGain.connect(this.bgmGain);
+          padGain.connect(masterGain);
 
           padOsc.start();
-          padOsc.stop(this.ctx.currentTime + 1.3);
+          padOsc.stop(activeCtx.currentTime + 1.3);
         });
       };
 
       playChord();
       this.bgmInterval = setInterval(playChord, 1400);
     } catch {
-      // Ignore background audio failure
+      this.stopBgm();
     }
   }
 
   stopBgm() {
     this.isBgmPlaying = false;
+    this.clearCelebrateTimers();
     if (this.bgmInterval) {
       clearInterval(this.bgmInterval);
       this.bgmInterval = null;
     }
     if (this.bgmGain) {
-      this.bgmGain.gain.value = 0;
+      try {
+        this.bgmGain.gain.value = 0;
+        this.bgmGain.disconnect();
+      } catch {
+        // Ignore already-disconnected gain
+      }
       this.bgmGain = null;
     }
   }
 }
 
 export const soundEngine = new SoundEngine();
-

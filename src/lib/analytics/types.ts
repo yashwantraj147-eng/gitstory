@@ -1,4 +1,4 @@
-import { GitHubRepo, GitHubCommitSimple, GitHubRelease, GitHubContributor } from "../github/types";
+import { GitHubRepo } from "../github/types";
 
 export type MilestoneType =
   | "genesis"
@@ -22,7 +22,7 @@ export interface Milestone {
 
 export interface PunchcardCell {
   dayOfWeek: number; // 0 = Sunday, 6 = Saturday
-  hour: number;      // 0 - 23
+  hour: number; // 0 - 23
   count: number;
   intensity: number; // 0.0 - 1.0 normalized
 }
@@ -40,6 +40,8 @@ export interface HeatmapData {
   peakHour: number;
   peakHourLabel: string;
   calendarDays: CalendarDay[];
+  calendarWindowLabel?: string;
+  startDayOfWeek?: number;
   maxDailyCommits: number;
   totalActiveDays: number;
   longestStreakDays: number;
@@ -55,9 +57,17 @@ export interface ContributorTimeBucket {
   }[];
 }
 
+export interface ContributorGrowthPoint {
+  period: string;
+  totalContributors: number;
+  totalCommits: number;
+  newContributors: number;
+}
+
 export interface ContributorTimeline {
   periods: string[];
   buckets: ContributorTimeBucket[];
+  growthSeries: ContributorGrowthPoint[];
   topContributors: {
     login: string;
     avatarUrl: string | null;
@@ -76,16 +86,24 @@ export interface LanguageItem {
   color: string;
 }
 
+export interface LanguageTimelinePoint {
+  period: string;
+  [language: string]: string | number;
+}
+
 export interface LanguageBreakdownData {
   languages: LanguageItem[];
   primaryLanguage: string | null;
   totalBytes: number;
+  timeline?: LanguageTimelinePoint[];
+  timelineLanguages?: string[];
 }
 
 export interface RepoStoryMetrics {
   lifespanDays: number;
   lifespanFormatted: string;
   totalCommitsAnalyzed: number;
+  totalCommitCountEstimate: number;
   commitVelocityPerMonth: number;
   nightOwlPercentage: number;
   weekendHackerPercentage: number;
@@ -119,4 +137,3 @@ export interface RepoStoryPayload {
   isSampled: boolean;
   generatedAt: string;
 }
-

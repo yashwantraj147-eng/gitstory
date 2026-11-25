@@ -1,19 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseRepoInput } from "@/lib/github/parsers";
-import { fetchRawRepoData, GitHubApiError, RateLimitError, RepoNotFoundError, EmptyRepoError } from "@/lib/github/client";
+import {
+  fetchRawRepoData,
+  GitHubApiError,
+  RateLimitError,
+  RepoNotFoundError,
+  EmptyRepoError,
+} from "@/lib/github/client";
 import { repoCache } from "@/lib/github/cache";
-import { generateRepoStory } from "@/lib/analytics/engine";
+import { generateRepoStoryWithNarrative } from "@/lib/analytics/engine";
 import { RepoStoryPayload } from "@/lib/analytics/types";
+import { NarrativeTone } from "@/lib/narrative/types";
 
 export const dynamic = "force-dynamic";
+
+function parseTone(toneParam: string | null): NarrativeTone {
+  if (toneParam === "chronicle" || toneParam === "humorous" || toneParam === "storyteller") {
+    return toneParam;
+  }
+  return "storyteller";
+}
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const repoInput = searchParams.get("repo");
     const refresh = searchParams.get("refresh") === "true";
+    const tone = parseTone(searchParams.get("tone"));
     const maxCommitsParam = searchParams.get("maxCommits");
-    const maxCommits = maxCommitsParam ? Math.min(2000, Math.max(100, parseInt(maxCommitsParam, 10))) : 1000;
+
+    let maxCommits = 1000;
+    if (maxCommitsParam !== null && maxCommitsParam.trim() !== "") {
+      const parsedNum = Number(maxCommitsParam);
+      if (!Number.isFinite(parsedNum) || parsedNum <= 0) {
+        return NextResponse.json(
+          { error: "Query parameter 'maxCommits' must be a positive number between 100 and 2000." },
+          { status: 400 }
+        );
+      }
+      maxCommits = Math.min(2000, Math.max(100, Math.floor(parsedNum)));
+    }
 
     if (!repoInput) {
       return NextResponse.json(
@@ -26,13 +52,14 @@ export async function GET(request: NextRequest) {
     if (!parsed) {
       return NextResponse.json(
         {
-          error: "Invalid repository format. Please provide a GitHub URL (e.g. https://github.com/facebook/react) or 'owner/repo' format.",
+          error:
+            "Invalid repository format. Please provide a GitHub URL (e.g. https://github.com/facebook/react) or 'owner/repo' format.",
         },
         { status: 400 }
       );
     }
 
-    const cacheKey = `story:${parsed.owner.toLowerCase()}/${parsed.repo.toLowerCase()}`;
+    const cacheKey = `story:${parsed.owner.toLowerCase()}/${parsed.repo.toLowerCase()}:${maxCommits}:${tone}`;
 
     if (!refresh) {
       const cachedStory = repoCache.get<RepoStoryPayload>(cacheKey);
@@ -49,9 +76,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Fetch and analyze
-    const rawBundle = await fetchRawRepoData(parsed.owner, parsed.repo, { maxCommits });
-    const story = generateRepoStory(rawBundle);
+    const rawBundle = await fetchRawRepoData(parsed.owner, parsed.repo, {
+      maxCommits,
+      bypassCache: refresh,
+    });
+    const story = await generateRepoStoryWithNarrative(rawBundle, tone);
 
     // Cache story for 30 minutes
     repoCache.set(cacheKey, story, 30 * 60 * 1000);
@@ -107,4 +136,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

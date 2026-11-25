@@ -7,7 +7,8 @@ export interface ParsedRepo {
  * Parses user input into normalized owner and repository names.
  * Supports:
  * - "https://github.com/facebook/react"
- * - "http://github.com/facebook/react.git"
+ * - "https://www.github.com/facebook/react?tab=readme-ov-file#react"
+ * - "http://github.com/facebook/react.git/"
  * - "github.com/facebook/react"
  * - "facebook/react"
  * - "https://github.com/facebook/react/tree/main/packages"
@@ -22,37 +23,39 @@ export function parseRepoInput(input: string): ParsedRepo | null {
     return null;
   }
 
-  // Remove trailing slashes first
-  trimmed = trimmed.replace(/\/+$/, "");
-
-  // Check if it's an external domain other than github.com
-  const hasOtherDomain = /^(https?:\/\/)?(?!github\.com\/)([a-zA-Z0-9-]+\.[a-zA-Z]{2,})(\/|$)/i.test(trimmed);
-  if (hasOtherDomain && !trimmed.startsWith("github.com/")) {
+  // Strip query string and hash fragment before normalizing paths
+  trimmed = trimmed.split(/[?#]/)[0].replace(/\/+$/, "");
+  if (!trimmed) {
     return null;
   }
 
-  // Remove trailing .git
-  trimmed = trimmed.replace(/\.git$/i, "");
+  const hasProtocol = /^https?:\/\//i.test(trimmed);
+  const withoutProtocol = trimmed.replace(/^https?:\/\//i, "");
 
-  // Remove protocol
-  let clean = trimmed.replace(/^https?:\/\//i, "");
+  // Reject URLs pointing to non-github.com hosts (including subdomains like gist.github.com)
+  const firstSegment = withoutProtocol.split("/")[0] || "";
+  if (
+    (hasProtocol || firstSegment.includes(".")) &&
+    !/^(www\.)?github\.com$/i.test(firstSegment)
+  ) {
+    return null;
+  }
 
   // Remove github.com prefix if present
-  clean = clean.replace(/^(www\.)?github\.com\//i, "");
-
-  // Strip anything after branch or tree paths (e.g. /tree/main/...)
+  const clean = withoutProtocol.replace(/^(www\.)?github\.com\/?/i, "");
   const parts = clean.split("/").filter(Boolean);
 
   if (parts.length >= 2) {
     const owner = parts[0];
-    let repo = parts[1];
+    const repo = parts[1].replace(/\.git$/i, "");
 
-    // Remove any remaining .git on repo
-    repo = repo.replace(/\.git$/i, "");
+    if (!owner || !repo || owner === "." || owner === ".." || repo === "." || repo === "..") {
+      return null;
+    }
 
     // Validate standard GitHub username and repo naming conventions
-    const isValidOwner = /^[a-zA-Z0-9_\-\.]+$/.test(owner);
-    const isValidRepo = /^[a-zA-Z0-9_\-\.]+$/.test(repo);
+    const isValidOwner = /^[a-zA-Z0-9](?:[a-zA-Z0-9._-]{0,38})$/.test(owner);
+    const isValidRepo = /^[a-zA-Z0-9._-]+$/.test(repo);
 
     if (isValidOwner && isValidRepo) {
       return { owner, repo };

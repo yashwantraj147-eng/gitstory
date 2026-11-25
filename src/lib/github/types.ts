@@ -28,6 +28,13 @@ export interface GitHubRepo {
   topics?: string[];
 }
 
+export interface GitHubCommitFileChange {
+  filename: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+}
+
 export interface GitHubCommitSimple {
   sha: string;
   message: string;
@@ -38,6 +45,7 @@ export interface GitHubCommitSimple {
   additions?: number;
   deletions?: number;
   totalChurn?: number;
+  files?: GitHubCommitFileChange[];
 }
 
 export interface GitHubCommitItem {
@@ -67,6 +75,12 @@ export interface GitHubCommitItem {
     additions: number;
     deletions: number;
   };
+  files?: Array<{
+    filename: string;
+    additions: number;
+    deletions: number;
+    changes: number;
+  }>;
 }
 
 export interface GitHubRelease {
@@ -106,11 +120,13 @@ export interface RateLimitStatus {
   reset: number;
   used: number;
   resetTimeFormatted: string;
+  unavailable?: boolean;
 }
 
 export interface RawRepoBundle {
   repo: GitHubRepo;
   commits: GitHubCommitSimple[];
+  genesisCommit?: GitHubCommitSimple;
   releases: GitHubRelease[];
   contributors: GitHubContributor[];
   languages: GitHubLanguages;
@@ -118,4 +134,3 @@ export interface RawRepoBundle {
   totalCommitCountEstimate: number;
   fetchedAt: string;
 }
-

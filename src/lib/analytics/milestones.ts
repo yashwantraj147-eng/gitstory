@@ -1,9 +1,16 @@
 import { GitHubCommitSimple, GitHubRelease } from "../github/types";
 import { Milestone } from "./types";
 
+export interface DetectMilestonesOptions {
+  isSampled?: boolean;
+  genesisCommit?: GitHubCommitSimple;
+  totalCommitCountEstimate?: number;
+}
+
 export function detectMilestones(
   commits: GitHubCommitSimple[],
-  releases: GitHubRelease[]
+  releases: GitHubRelease[],
+  options?: DetectMilestonesOptions
 ): Milestone[] {
   const milestones: Milestone[] = [];
 
@@ -11,13 +18,15 @@ export function detectMilestones(
     return milestones;
   }
 
+  const isSampled = options?.isSampled ?? false;
+
   // Ensure chronological order (oldest first)
   const sorted = [...commits].sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
 
-  // 1. Genesis Milestone
-  const first = sorted[0];
+  // 1. Genesis Milestone (prefer explicitly fetched true first commit when sampled)
+  const first = options?.genesisCommit ?? sorted[0];
   milestones.push({
     id: `milestone-genesis-${first.sha.slice(0, 7)}`,
     type: "genesis",
@@ -32,28 +41,30 @@ export function detectMilestones(
     },
   });
 
-  // 2. Numerical Milestones (100th, 500th, 1,000th commit)
-  const thresholds = [100, 500, 1000, 5000];
-  for (const t of thresholds) {
-    if (sorted.length >= t) {
-      const c = sorted[t - 1];
-      milestones.push({
-        id: `milestone-commit-${t}`,
-        type: "century",
-        title: `${t.toLocaleString()}th Commit Reached`,
-        description: `Project hit milestone #${t} committed by ${c.authorName || c.authorLogin || "contributor"}.`,
-        date: c.date,
-        iconName: "Trophy",
-        badgeColor: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-        metadata: {
-          commitNumber: t,
-          sha: c.sha.slice(0, 7),
-        },
-      });
+  // 2. Numerical Milestones (accurate only when full history is present, not a recent slice)
+  if (!isSampled) {
+    const thresholds = [100, 500, 1000, 5000];
+    for (const t of thresholds) {
+      if (sorted.length >= t) {
+        const c = sorted[t - 1];
+        milestones.push({
+          id: `milestone-commit-${t}`,
+          type: "century",
+          title: `${t.toLocaleString()}th Commit Reached`,
+          description: `Project hit milestone #${t} committed by ${c.authorName || c.authorLogin || "contributor"}.`,
+          date: c.date,
+          iconName: "Trophy",
+          badgeColor: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+          metadata: {
+            commitNumber: t,
+            sha: c.sha.slice(0, 7),
+          },
+        });
+      }
     }
   }
 
-  // 3. The Long Slumber (Longest inactivity gap >= 14 days)
+  // 3. The Long Slumber (Longest inactivity gap >= 14 days among adjacent commits)
   let longestGapMs = 0;
   let gapEndDate = "";
   let gapDays = 0;
@@ -70,7 +81,8 @@ export function detectMilestones(
     }
   }
 
-  if (gapDays >= 14) {
+  // When sampled, avoid falsely reporting the sampling gap between distant pages as inactivity
+  if (gapDays >= 14 && !isSampled) {
     milestones.push({
       id: "milestone-long-slumber",
       type: "slumber",
@@ -120,11 +132,11 @@ export function detectMilestones(
     }
   }
 
-  // 5. Monster Commit (Commit with largest recorded churn or longest message)
+  // 5. Monster Commit (Commit with largest recorded churn)
   let maxChurnCommit: GitHubCommitSimple | null = null;
   let maxChurn = 0;
   for (const c of sorted) {
-    const churn = (c.additions ?? 0) + (c.deletions ?? 0);
+    const churn = c.totalChurn ?? (c.additions ?? 0) + (c.deletions ?? 0);
     if (churn > maxChurn) {
       maxChurn = churn;
       maxChurnCommit = c;
@@ -149,108 +161,118 @@ export function detectMilestones(
 
   // 6. Release Milestones
   if (releases && releases.length > 0) {
-    const sortedReleases = [...releases].filter(r => r.published_at || r.created_at).sort(
-      (a, b) => new Date(a.published_at || a.created_at).getTime() - new Date(b.published_at || b.created_at).getTime()
-    );
+    const sortedReleases = [...releases]
+      .filter((r) => r.published_at || r.created_at)
+      .sort(
+        (a, b) =>
+          new Date(a.published_at || a.created_at).getTime() -
+          new Date(b.published_at || b.created_at).getTime()
+      );
 
-    // First Release
-    const firstRel = sortedReleases[0];
-    milestones.push({
-      id: `milestone-rel-first-${firstRel.tag_name}`,
-      type: "release",
-      title: `First Public Release: ${firstRel.tag_name}`,
-      description: firstRel.name && firstRel.name !== firstRel.tag_name ? `${firstRel.name} (${firstRel.tag_name})` : `Official initial release tagged on GitHub.`,
-      date: firstRel.published_at || firstRel.created_at,
-      iconName: "Tag",
-      badgeColor: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
-      metadata: {
-        tag: firstRel.tag_name,
-      },
-    });
-
-    // Check for v1.0.0 (exact major 1.0 tag)
-    const v1 = sortedReleases.find(r => /^v?1\.0(\.0)?$/i.test(r.tag_name));
-    if (v1 && v1.tag_name !== firstRel.tag_name) {
+    if (sortedReleases.length > 0) {
+      const firstRel = sortedReleases[0];
       milestones.push({
-        id: `milestone-rel-v1-${v1.tag_name}`,
+        id: `milestone-rel-first-${firstRel.tag_name}`,
         type: "release",
-        title: `Major Milestone: Version 1.0 (${v1.tag_name})`,
-        description: "Project reached production readiness and API maturity with version 1.0.",
-        date: v1.published_at || v1.created_at,
-        iconName: "Trophy",
-        badgeColor: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+        title: `First Public Release: ${firstRel.tag_name}`,
+        description:
+          firstRel.name && firstRel.name !== firstRel.tag_name
+            ? `${firstRel.name} (${firstRel.tag_name})`
+            : `Official initial release tagged on GitHub.`,
+        date: firstRel.published_at || firstRel.created_at,
+        iconName: "Tag",
+        badgeColor: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
         metadata: {
-          tag: v1.tag_name,
+          tag: firstRel.tag_name,
+        },
+      });
+
+      // Check for v1.0.0 (exact major 1.0 tag)
+      const v1 = sortedReleases.find((r) => /^v?1\.0(\.0)?$/i.test(r.tag_name));
+      if (v1 && v1.tag_name !== firstRel.tag_name) {
+        milestones.push({
+          id: `milestone-rel-v1-${v1.tag_name}`,
+          type: "release",
+          title: `Major Milestone: Version 1.0 (${v1.tag_name})`,
+          description: "Project reached production readiness and API maturity with version 1.0.",
+          date: v1.published_at || v1.created_at,
+          iconName: "Trophy",
+          badgeColor: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+          metadata: {
+            tag: v1.tag_name,
+          },
+        });
+      }
+
+      // Latest Release (if different from first and v1)
+      if (sortedReleases.length > 1) {
+        const latestRel = sortedReleases[sortedReleases.length - 1];
+        if (latestRel.tag_name !== firstRel.tag_name && latestRel.tag_name !== v1?.tag_name) {
+          milestones.push({
+            id: `milestone-rel-latest-${latestRel.tag_name}`,
+            type: "release",
+            title: `Current Release: ${latestRel.tag_name}`,
+            description: `Latest public release shipping features and fixes.`,
+            date: latestRel.published_at || latestRel.created_at,
+            iconName: "Tag",
+            badgeColor: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+            metadata: {
+              tag: latestRel.tag_name,
+            },
+          });
+        }
+      }
+    }
+  }
+
+  // 7. Community Growth Milestones (accurate only when full history is scanned)
+  if (!isSampled) {
+    const seenAuthors = new Set<string>();
+    let tenthContributorDate: string | null = null;
+    let twentyFifthDate: string | null = null;
+
+    for (const c of sorted) {
+      const authorKey = (c.authorLogin || c.authorName).toLowerCase();
+      if (!seenAuthors.has(authorKey)) {
+        seenAuthors.add(authorKey);
+        if (seenAuthors.size === 10 && !tenthContributorDate) {
+          tenthContributorDate = c.date;
+        }
+        if (seenAuthors.size === 25 && !twentyFifthDate) {
+          twentyFifthDate = c.date;
+        }
+      }
+    }
+
+    if (tenthContributorDate) {
+      milestones.push({
+        id: "milestone-contrib-10",
+        type: "contributor_boom",
+        title: "Community Expansion: 10 Contributors",
+        description: "A thriving open-source community: the repository welcomed its 10th distinct code contributor.",
+        date: tenthContributorDate,
+        iconName: "Users",
+        badgeColor: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+        metadata: {
+          contributors: 10,
         },
       });
     }
 
-    // Latest Release (if different from first and v1)
-    if (sortedReleases.length > 1) {
-      const latestRel = sortedReleases[sortedReleases.length - 1];
-      if (latestRel.tag_name !== firstRel.tag_name && latestRel.tag_name !== v1?.tag_name) {
-        milestones.push({
-          id: `milestone-rel-latest-${latestRel.tag_name}`,
-          type: "release",
-          title: `Current Release: ${latestRel.tag_name}`,
-          description: `Latest public release shipping features and fixes.`,
-          date: latestRel.published_at || latestRel.created_at,
-          iconName: "Tag",
-          badgeColor: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-          metadata: {
-            tag: latestRel.tag_name,
-          },
-        });
-      }
+    if (twentyFifthDate) {
+      milestones.push({
+        id: "milestone-contrib-25",
+        type: "contributor_boom",
+        title: "Ecosystem Growth: 25 Contributors",
+        description: "Major community adoption reached with 25 distinct engineers committing code.",
+        date: twentyFifthDate,
+        iconName: "Users",
+        badgeColor: "bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20",
+        metadata: {
+          contributors: 25,
+        },
+      });
     }
-  }
-
-  // 7. Community Growth Milestones (10th, 25th contributor joins)
-  const seenAuthors = new Set<string>();
-  let tenthContributorDate: string | null = null;
-  let twentyFifthDate: string | null = null;
-
-  for (const c of sorted) {
-    const authorKey = c.authorLogin || c.authorName;
-    if (!seenAuthors.has(authorKey)) {
-      seenAuthors.add(authorKey);
-      if (seenAuthors.size === 10 && !tenthContributorDate) {
-        tenthContributorDate = c.date;
-      }
-      if (seenAuthors.size === 25 && !twentyFifthDate) {
-        twentyFifthDate = c.date;
-      }
-    }
-  }
-
-  if (tenthContributorDate) {
-    milestones.push({
-      id: "milestone-contrib-10",
-      type: "contributor_boom",
-      title: "Community Expansion: 10 Contributors",
-      description: "A thriving open-source community: the repository welcomed its 10th distinct code contributor.",
-      date: tenthContributorDate,
-      iconName: "Users",
-      badgeColor: "bg-purple-500/10 text-purple-400 border-purple-500/20",
-      metadata: {
-        contributors: 10,
-      },
-    });
-  }
-
-  if (twentyFifthDate) {
-    milestones.push({
-      id: "milestone-contrib-25",
-      type: "contributor_boom",
-      title: "Ecosystem Growth: 25 Contributors",
-      description: "Major community adoption reached with 25 distinct engineers committing code.",
-      date: twentyFifthDate,
-      iconName: "Users",
-      badgeColor: "bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20",
-      metadata: {
-        contributors: 25,
-      },
-    });
   }
 
   // Sort all detected milestones chronologically
