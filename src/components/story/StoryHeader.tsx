@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import {
   Star,
   GitFork,
-  AlertCircle,
   ExternalLink,
   Share2,
   Download,
@@ -15,6 +14,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { RepoStoryPayload } from "@/lib/analytics/types";
+import { copyCurrentUrl } from "@/lib/export/download";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -25,13 +25,18 @@ interface StoryHeaderProps {
   onOpenWrappedModal: () => void;
 }
 
-export function StoryHeader({ story, onOpenExportModal, onDownloadJson, onOpenWrappedModal }: StoryHeaderProps) {
+export function StoryHeader({
+  story,
+  onOpenExportModal,
+  onDownloadJson,
+  onOpenWrappedModal,
+}: StoryHeaderProps) {
   const { repo, metrics, isSampled } = story;
   const [copied, setCopied] = useState(false);
 
-  const handleShare = () => {
-    if (typeof window !== "undefined") {
-      navigator.clipboard.writeText(window.location.href);
+  const handleShare = async () => {
+    const ok = await copyCurrentUrl();
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -39,17 +44,15 @@ export function StoryHeader({ story, onOpenExportModal, onDownloadJson, onOpenWr
 
   return (
     <div className="w-full bg-slate-900/90 border border-slate-800 rounded-2xl p-6 sm:p-8 backdrop-blur-md shadow-2xl relative overflow-hidden">
-      {/* Decorative gradient orb */}
       <div className="absolute -top-24 -right-24 w-80 h-80 bg-brand-500/10 rounded-full blur-3xl pointer-events-none" />
 
       <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div className="flex items-start gap-4 sm:gap-5">
-          {/* Owner avatar */}
           <div className="relative">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={repo.owner.avatar_url}
-              alt={repo.owner.login}
+              alt={`${repo.owner.login} avatar`}
               className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-slate-700 bg-slate-800 object-cover shadow-lg"
             />
             {repo.owner.type === "Organization" && (
@@ -62,7 +65,7 @@ export function StoryHeader({ story, onOpenExportModal, onDownloadJson, onOpenWr
           <div className="flex flex-col space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                {repo.name}
+                {repo.full_name}
               </h1>
               <a
                 href={repo.html_url}
@@ -70,6 +73,7 @@ export function StoryHeader({ story, onOpenExportModal, onDownloadJson, onOpenWr
                 rel="noopener noreferrer"
                 className="text-slate-400 hover:text-brand-300 transition-colors p-1"
                 title="View on GitHub"
+                aria-label={`Open ${repo.full_name} on GitHub`}
               >
                 <ExternalLink className="w-4 h-4" />
               </a>
@@ -80,7 +84,8 @@ export function StoryHeader({ story, onOpenExportModal, onDownloadJson, onOpenWr
               )}
               {isSampled && (
                 <Badge variant="warning" className="text-[10px]">
-                  Sampled (Large Repo)
+                  Sampled ({metrics.totalCommitsAnalyzed.toLocaleString()} of ~
+                  {metrics.totalCommitCountEstimate.toLocaleString()} commits)
                 </Badge>
               )}
             </div>
@@ -89,7 +94,6 @@ export function StoryHeader({ story, onOpenExportModal, onDownloadJson, onOpenWr
               {repo.description || "No description provided for this repository."}
             </p>
 
-            {/* Quick stats row */}
             <div className="flex flex-wrap items-center gap-4 pt-2 text-xs text-slate-300">
               <span className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded-md border border-slate-700/50">
                 <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
@@ -113,7 +117,6 @@ export function StoryHeader({ story, onOpenExportModal, onDownloadJson, onOpenWr
           </div>
         </div>
 
-        {/* Action buttons */}
         <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5">
           <Button
             variant="primary"
@@ -122,35 +125,20 @@ export function StoryHeader({ story, onOpenExportModal, onDownloadJson, onOpenWr
             className="flex-1 sm:flex-none bg-gradient-to-r from-purple-600 via-brand-500 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-lg shadow-purple-500/20 font-semibold"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
-            <span>Launch Wrapped 🎉</span>
+            <span>Launch Wrapped</span>
           </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleShare}
-            className="flex-1 sm:flex-none"
-          >
+          <Button variant="outline" size="sm" onClick={() => void handleShare()} className="flex-1 sm:flex-none">
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
             <span>{copied ? "Link Copied!" : "Share Link"}</span>
           </Button>
 
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={onOpenExportModal}
-            className="flex-1 sm:flex-none"
-          >
+          <Button variant="secondary" size="sm" onClick={onOpenExportModal} className="flex-1 sm:flex-none">
             <ImageIcon className="w-3.5 h-3.5 text-brand-400" />
             <span>Export Card</span>
           </Button>
 
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={onDownloadJson}
-            className="flex-1 sm:flex-none"
-          >
+          <Button variant="primary" size="sm" onClick={onDownloadJson} className="flex-1 sm:flex-none">
             <Download className="w-3.5 h-3.5" />
             <span>JSON Data</span>
           </Button>
@@ -159,4 +147,3 @@ export function StoryHeader({ story, onOpenExportModal, onDownloadJson, onOpenWr
     </div>
   );
 }
-

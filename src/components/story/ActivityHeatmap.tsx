@@ -23,6 +23,8 @@ export function ActivityHeatmap({ heatmap }: ActivityHeatmapProps) {
   const [hoveredDate, setHoveredDate] = useState<{ date: string; count: number } | null>(null);
   const [hoveredPunch, setHoveredPunch] = useState<{ day: string; hour: number; count: number } | null>(null);
 
+  const leadingSpacers = Math.max(0, Math.min(6, heatmap.startDayOfWeek ?? 0));
+
   return (
     <Card className="w-full">
       <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
@@ -33,14 +35,20 @@ export function ActivityHeatmap({ heatmap }: ActivityHeatmapProps) {
           <div>
             <CardTitle>Commit Rhythm & Heatmap</CardTitle>
             <p className="text-xs text-slate-400 mt-0.5">
-              Coding frequency mapped across calendar days and 24x7 hourly cycles
+              Coding frequency mapped across {heatmap.calendarWindowLabel || "52 weeks"} and 24x7 hourly cycles
             </p>
           </div>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex items-center gap-1 bg-slate-950/70 p-1 rounded-xl border border-slate-800">
+        <div
+          role="tablist"
+          aria-label="Heatmap view switcher"
+          className="flex items-center gap-1 bg-slate-950/70 p-1 rounded-xl border border-slate-800"
+        >
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "calendar"}
             onClick={() => setActiveTab("calendar")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
               activeTab === "calendar"
@@ -52,6 +60,9 @@ export function ActivityHeatmap({ heatmap }: ActivityHeatmapProps) {
             <span>52-Week Grid</span>
           </button>
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "punchcard"}
             onClick={() => setActiveTab("punchcard")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
               activeTab === "punchcard"
@@ -66,7 +77,6 @@ export function ActivityHeatmap({ heatmap }: ActivityHeatmapProps) {
       </CardHeader>
 
       <div className="p-4 sm:p-6 space-y-6">
-        {/* Metric Highlights Banner */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80 flex flex-col space-y-1">
             <span className="text-[11px] text-slate-400 uppercase tracking-wider font-semibold">
@@ -107,25 +117,41 @@ export function ActivityHeatmap({ heatmap }: ActivityHeatmapProps) {
           </div>
         </div>
 
-        {/* View 1: 52-Week Contribution Grid */}
         {activeTab === "calendar" && (
           <div className="space-y-3">
-            <div className="overflow-x-auto pb-2">
-              <div className="inline-grid grid-rows-7 grid-flow-col gap-1 min-w-[700px]">
-                {heatmap.calendarDays.map((day) => {
-                  return (
-                    <div
-                      key={day.date}
-                      onMouseEnter={() => setHoveredDate({ date: day.date, count: day.count })}
-                      onMouseLeave={() => setHoveredDate(null)}
-                      className={`w-3 h-3 rounded-[2px] border transition-transform hover:scale-125 cursor-pointer ${LEVEL_COLORS[day.level]}`}
-                    />
-                  );
-                })}
+            <div className="overflow-x-auto pb-2 flex gap-2">
+              <div className="grid grid-rows-7 gap-1 text-[10px] font-mono text-slate-500 pt-0.5 select-none">
+                <span>Sun</span>
+                <span className="opacity-0">Mon</span>
+                <span>Tue</span>
+                <span className="opacity-0">Wed</span>
+                <span>Thu</span>
+                <span className="opacity-0">Fri</span>
+                <span>Sat</span>
+              </div>
+              <div
+                role="grid"
+                aria-label="52-week commit calendar"
+                className="inline-grid grid-rows-7 grid-flow-col gap-1 min-w-[700px]"
+              >
+                {Array.from({ length: leadingSpacers }).map((_, idx) => (
+                  <div key={`spacer-${idx}`} className="w-3 h-3" aria-hidden="true" />
+                ))}
+                {heatmap.calendarDays.map((day) => (
+                  <button
+                    key={day.date}
+                    type="button"
+                    aria-label={`${day.count} commit${day.count === 1 ? "" : "s"} on ${day.date}`}
+                    onMouseEnter={() => setHoveredDate({ date: day.date, count: day.count })}
+                    onMouseLeave={() => setHoveredDate(null)}
+                    onFocus={() => setHoveredDate({ date: day.date, count: day.count })}
+                    onBlur={() => setHoveredDate(null)}
+                    className={`w-3 h-3 rounded-[2px] border transition-transform hover:scale-125 focus:scale-125 focus:outline-none focus:ring-1 focus:ring-emerald-300 cursor-pointer ${LEVEL_COLORS[day.level]}`}
+                  />
+                ))}
               </div>
             </div>
 
-            {/* Calendar Legend and Hover Tooltip */}
             <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/60">
               <div>
                 {hoveredDate ? (
@@ -133,7 +159,9 @@ export function ActivityHeatmap({ heatmap }: ActivityHeatmapProps) {
                     {hoveredDate.count} commit{hoveredDate.count === 1 ? "" : "s"} on {hoveredDate.date}
                   </span>
                 ) : (
-                  <span className="text-slate-500">Hover over any day to inspect commit count</span>
+                  <span className="text-slate-500">
+                    Hover or focus any day to inspect commit count ({heatmap.calendarWindowLabel || "Last 52 weeks"})
+                  </span>
                 )}
               </div>
 
@@ -148,12 +176,10 @@ export function ActivityHeatmap({ heatmap }: ActivityHeatmapProps) {
           </div>
         )}
 
-        {/* View 2: 24x7 Punchcard Matrix */}
         {activeTab === "punchcard" && (
           <div className="space-y-4">
             <div className="overflow-x-auto pb-2">
               <div className="min-w-[650px] space-y-1">
-                {/* Hours row labels */}
                 <div className="flex items-center text-[10px] font-mono text-slate-500 pl-10">
                   {Array.from({ length: 24 }).map((_, h) => (
                     <div key={h} className="w-6 text-center">
@@ -162,62 +188,58 @@ export function ActivityHeatmap({ heatmap }: ActivityHeatmapProps) {
                   ))}
                 </div>
 
-                {/* Day rows */}
-                {DAYS_SHORT.map((dayName, dayIndex) => {
-                  return (
-                    <div key={dayName} className="flex items-center gap-2">
-                      <span className="w-8 text-[11px] font-mono text-slate-400">
-                        {dayName}
-                      </span>
-                      <div className="flex items-center">
-                        {Array.from({ length: 24 }).map((_, hour) => {
-                          const cell = heatmap.punchcard.find(
-                            (p) => p.dayOfWeek === dayIndex && p.hour === hour
-                          );
-                          const count = cell?.count || 0;
-                          const intensity = cell?.intensity || 0;
+                {DAYS_SHORT.map((dayName, dayIndex) => (
+                  <div key={dayName} className="flex items-center gap-2">
+                    <span className="w-8 text-[11px] font-mono text-slate-400">{dayName}</span>
+                    <div className="flex items-center">
+                      {Array.from({ length: 24 }).map((_, hour) => {
+                        const cell = heatmap.punchcard.find(
+                          (p) => p.dayOfWeek === dayIndex && p.hour === hour
+                        );
+                        const count = cell?.count || 0;
+                        const intensity = cell?.intensity || 0;
 
-                          // Color scale based on intensity
-                          let bg = "bg-slate-900";
-                          if (intensity > 0.75) bg = "bg-emerald-400";
-                          else if (intensity > 0.45) bg = "bg-emerald-600";
-                          else if (intensity > 0.15) bg = "bg-emerald-800";
-                          else if (intensity > 0) bg = "bg-emerald-950";
+                        let bg = "bg-slate-900";
+                        if (intensity > 0.75) bg = "bg-emerald-400";
+                        else if (intensity > 0.45) bg = "bg-emerald-600";
+                        else if (intensity > 0.15) bg = "bg-emerald-800";
+                        else if (intensity > 0) bg = "bg-emerald-950";
 
-                          return (
+                        return (
+                          <button
+                            key={hour}
+                            type="button"
+                            aria-label={`${dayName} at ${hour.toString().padStart(2, "0")}:00 UTC: ${count} commits`}
+                            onMouseEnter={() => setHoveredPunch({ day: dayName, hour, count })}
+                            onMouseLeave={() => setHoveredPunch(null)}
+                            onFocus={() => setHoveredPunch({ day: dayName, hour, count })}
+                            onBlur={() => setHoveredPunch(null)}
+                            className="w-6 h-6 flex items-center justify-center p-0.5 cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-300 rounded"
+                          >
                             <div
-                              key={hour}
-                              onMouseEnter={() =>
-                                setHoveredPunch({ day: dayName, hour, count })
-                              }
-                              onMouseLeave={() => setHoveredPunch(null)}
-                              className={`w-6 h-6 flex items-center justify-center p-0.5 cursor-pointer`}
-                            >
-                              <div
-                                style={{
-                                  transform: `scale(${Math.max(0.35, intensity)})`,
-                                }}
-                                className={`w-4 h-4 rounded-full transition-transform ${bg} hover:scale-110 shadow-sm`}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
+                              style={{
+                                transform: `scale(${Math.max(0.35, intensity)})`,
+                              }}
+                              className={`w-4 h-4 rounded-full transition-transform ${bg} hover:scale-110 shadow-sm`}
+                            />
+                          </button>
+                        );
+                      })}
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Punchcard Tooltip */}
             <div className="text-xs text-slate-400 pt-2 border-t border-slate-800/60 flex items-center justify-between">
               {hoveredPunch ? (
                 <span className="font-mono text-emerald-400 font-semibold">
-                  {hoveredPunch.day} at {hoveredPunch.hour.toString().padStart(2, "0")}:00 UTC — {hoveredPunch.count} commits
+                  {hoveredPunch.day} at {hoveredPunch.hour.toString().padStart(2, "0")}:00 UTC —{" "}
+                  {hoveredPunch.count} commits
                 </span>
               ) : (
                 <span className="text-slate-500">
-                  Hover over punch circles to see hourly intensity
+                  Hover or focus punch circles to see hourly intensity
                 </span>
               )}
               <span className="text-slate-500 font-mono text-[11px]">UTC Timestamps</span>
@@ -228,4 +250,3 @@ export function ActivityHeatmap({ heatmap }: ActivityHeatmapProps) {
     </Card>
   );
 }
-

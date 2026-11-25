@@ -14,9 +14,8 @@ import {
   Calendar,
   ExternalLink,
 } from "lucide-react";
-import { Milestone, MilestoneType } from "@/lib/analytics/types";
+import { Milestone } from "@/lib/analytics/types";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 
 interface TimelineViewProps {
   milestones: Milestone[];
@@ -39,7 +38,14 @@ export function TimelineView({ milestones, repoFullName }: TimelineViewProps) {
   const filtered = milestones.filter((m) => {
     if (filterType === "all") return true;
     if (filterType === "releases") return m.type === "release";
-    if (filterType === "highlights") return m.type === "genesis" || m.type === "golden_era" || m.type === "monster_commit";
+    if (filterType === "highlights") {
+      return (
+        m.type === "genesis" ||
+        m.type === "golden_era" ||
+        m.type === "monster_commit" ||
+        m.type === "slumber"
+      );
+    }
     if (filterType === "community") return m.type === "contributor_boom" || m.type === "century";
     return true;
   });
@@ -59,27 +65,36 @@ export function TimelineView({ milestones, repoFullName }: TimelineViewProps) {
           </div>
         </div>
 
-        {/* Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+        <div
+          role="tablist"
+          aria-label="Filter timeline milestones"
+          className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0"
+        >
           <Filter className="w-3.5 h-3.5 text-slate-500 mr-1" />
           {[
             { id: "all", label: "All" },
             { id: "releases", label: "Releases" },
             { id: "highlights", label: "Key Highlights" },
             { id: "community", label: "Community" },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setFilterType(tab.id)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                filterType === tab.id
-                  ? "bg-brand-600 text-white shadow-sm"
-                  : "bg-slate-800/60 text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+          ].map((tab) => {
+            const selected = filterType === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                onClick={() => setFilterType(tab.id)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                  selected
+                    ? "bg-brand-600 text-white shadow-sm"
+                    : "bg-slate-800/60 text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
       </CardHeader>
 
@@ -107,14 +122,12 @@ export function TimelineView({ milestones, repoFullName }: TimelineViewProps) {
                   transition={{ duration: 0.35, delay: Math.min(index * 0.05, 0.4) }}
                   className="relative pl-7 sm:pl-9 group"
                 >
-                  {/* Timeline Node Point */}
                   <div
                     className={`absolute -left-[17px] top-1.5 w-8 h-8 rounded-full border-2 border-slate-900 flex items-center justify-center transition-transform group-hover:scale-110 shadow-lg ${item.badgeColor}`}
                   >
                     <IconComponent className="w-4 h-4" />
                   </div>
 
-                  {/* Card Content */}
                   <div className="bg-slate-900/80 hover:bg-slate-800/60 border border-slate-800 hover:border-slate-700/80 rounded-xl p-4 sm:p-5 transition-all shadow-md">
                     <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
                       <div className="flex items-center gap-2">
@@ -155,9 +168,7 @@ export function TimelineView({ milestones, repoFullName }: TimelineViewProps) {
                       {item.title}
                     </h4>
 
-                    <p className="text-sm text-slate-400 mt-1 leading-relaxed">
-                      {item.description}
-                    </p>
+                    <p className="text-sm text-slate-400 mt-1 leading-relaxed">{item.description}</p>
                   </div>
                 </motion.div>
               );
@@ -168,4 +179,3 @@ export function TimelineView({ milestones, repoFullName }: TimelineViewProps) {
     </Card>
   );
 }
-

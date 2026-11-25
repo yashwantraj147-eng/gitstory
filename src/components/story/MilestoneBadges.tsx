@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Award, Zap, Moon, Flame, Users, Tag, ShieldCheck } from "lucide-react";
+import { Award, Zap, Moon, Flame, Users, Tag, ShieldCheck, History } from "lucide-react";
 import { RepoStoryPayload } from "@/lib/analytics/types";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -11,13 +11,15 @@ interface MilestoneBadgesProps {
 
 export function MilestoneBadges({ story }: MilestoneBadgesProps) {
   const { metrics, contributors, milestones } = story;
+  const hasMegacommit = milestones.some((m) => m.type === "monster_commit");
+  const hasSlumber = milestones.some((m) => m.type === "slumber");
 
   const badges = [
     {
       id: "century",
       label: "Century Club",
       description: "Over 100+ commits logged to the repository",
-      achieved: metrics.totalCommitsAnalyzed >= 100,
+      achieved: metrics.totalCommitCountEstimate >= 100,
       icon: ShieldCheck,
       color: "text-blue-400 bg-blue-500/10 border-blue-500/30",
     },
@@ -32,7 +34,7 @@ export function MilestoneBadges({ story }: MilestoneBadgesProps) {
     {
       id: "night",
       label: "Night Owl Squad",
-      description: `${metrics.nightOwlPercentage}% of code committed during vampire hours`,
+      description: `${metrics.nightOwlPercentage}% of code committed during late hours`,
       achieved: metrics.nightOwlPercentage >= 25,
       icon: Moon,
       color: "text-purple-400 bg-purple-500/10 border-purple-500/30",
@@ -61,6 +63,26 @@ export function MilestoneBadges({ story }: MilestoneBadgesProps) {
       icon: Users,
       color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/30",
     },
+    {
+      id: "megacommit",
+      label: "Megacommit Legend",
+      description: hasMegacommit
+        ? "Shipped a massive single-commit architectural overhaul"
+        : "No massive single-commit overhauls sampled",
+      achieved: hasMegacommit,
+      icon: Award,
+      color: "text-violet-400 bg-violet-500/10 border-violet-500/30",
+    },
+    {
+      id: "endurance",
+      label: hasSlumber ? "Comeback Kid" : "Long Endurance",
+      description: hasSlumber
+        ? "Revived active development after an extended hibernation"
+        : `${metrics.lifespanFormatted} of active project longevity`,
+      achieved: hasSlumber || metrics.lifespanDays >= 365,
+      icon: History,
+      color: "text-indigo-400 bg-indigo-500/10 border-indigo-500/30",
+    },
   ];
 
   return (
@@ -79,7 +101,7 @@ export function MilestoneBadges({ story }: MilestoneBadgesProps) {
         </div>
       </CardHeader>
 
-      <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+      <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {badges.map((badge) => {
           const Icon = badge.icon;
           return (
@@ -95,12 +117,8 @@ export function MilestoneBadges({ story }: MilestoneBadgesProps) {
                 <Icon className="w-4 h-4" />
               </div>
               <div className="flex flex-col space-y-0.5">
-                <span className="text-sm font-bold tracking-tight text-slate-100">
-                  {badge.label}
-                </span>
-                <span className="text-xs text-slate-400 leading-snug">
-                  {badge.description}
-                </span>
+                <span className="text-sm font-bold tracking-tight text-slate-100">{badge.label}</span>
+                <span className="text-xs text-slate-400 leading-snug">{badge.description}</span>
               </div>
             </div>
           );
@@ -109,4 +127,3 @@ export function MilestoneBadges({ story }: MilestoneBadgesProps) {
     </Card>
   );
 }
-

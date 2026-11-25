@@ -12,11 +12,11 @@ export function Footer() {
         <div className="flex items-center gap-1">
           <span>Crafted with</span>
           <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500 inline" />
-          <span>using Next.js, Framer Motion, and Tailwind CSS</span>
+          <span>using Next.js, Recharts, Framer Motion, and Tailwind CSS</span>
         </div>
         <div className="flex items-center gap-4">
           <a
-            href="https://github.com"
+            href="https://github.com/yashwantraj147-eng/gitstory/blob/main/LICENSE"
             target="_blank"
             rel="noopener noreferrer"
             className="hover:text-slate-300 transition-colors"
@@ -37,4 +37,3 @@ export function Footer() {
     </footer>
   );
 }
-

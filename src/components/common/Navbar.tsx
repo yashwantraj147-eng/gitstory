@@ -2,17 +2,18 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { GitBranch, Star, Zap, Github, RefreshCw } from "lucide-react";
+import { GitBranch, Zap, Code2 } from "lucide-react";
 import { RateLimitStatus } from "@/lib/github/types";
 
 export function Navbar() {
   const [rateLimit, setRateLimit] = useState<RateLimitStatus | null>(null);
 
   useEffect(() => {
+    let active = true;
     async function checkLimit() {
       try {
-        const res = await fetch("/api/rate-limit");
-        if (res.ok) {
+        const res = await fetch("/api/rate-limit", { cache: "no-store" });
+        if (res.ok && active) {
           const data = (await res.json()) as RateLimitStatus;
           setRateLimit(data);
         }
@@ -20,7 +21,10 @@ export function Navbar() {
         // Ignore rate limit check failures
       }
     }
-    checkLimit();
+    void checkLimit();
+    return () => {
+      active = false;
+    };
   }, []);
 
   return (
@@ -41,12 +45,16 @@ export function Navbar() {
         </Link>
 
         <div className="flex items-center gap-3">
-          {rateLimit && (
+          {rateLimit && !rateLimit.unavailable && (
             <div
               title={`GitHub API remaining calls: ${rateLimit.remaining} / ${rateLimit.limit}. Resets at ${rateLimit.resetTimeFormatted}`}
               className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs text-slate-300"
             >
-              <Zap className={`w-3.5 h-3.5 ${rateLimit.remaining < 10 ? "text-rose-400 animate-pulse" : "text-amber-400"}`} />
+              <Zap
+                className={`w-3.5 h-3.5 ${
+                  rateLimit.remaining < 10 ? "text-rose-400 animate-pulse" : "text-amber-400"
+                }`}
+              />
               <span className="font-mono">{rateLimit.remaining}</span>
               <span className="text-slate-500">/</span>
               <span className="text-slate-500 font-mono">{rateLimit.limit} req/hr</span>
@@ -54,12 +62,13 @@ export function Navbar() {
           )}
 
           <a
-            href="https://github.com"
+            href="https://github.com/yashwantraj147-eng/gitstory"
             target="_blank"
             rel="noopener noreferrer"
+            aria-label="View GitStory repository on GitHub"
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 transition-colors"
           >
-            <Github className="w-4 h-4" />
+            <Code2 className="w-4 h-4" />
             <span className="hidden sm:inline">GitHub</span>
           </a>
         </div>
@@ -67,4 +76,3 @@ export function Navbar() {
     </header>
   );
 }
-

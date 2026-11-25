@@ -20,7 +20,6 @@ import {
   Star,
   GitFork,
   Download,
-  Share2,
 } from "lucide-react";
 import { RepoStoryPayload } from "@/lib/analytics/types";
 import { soundEngine } from "@/lib/audio/synth";
@@ -34,20 +33,18 @@ interface StoryWrappedModalProps {
 }
 
 const SLIDE_DURATION_MS = 6000;
+const TOTAL_SLIDES = 5;
 
-export function StoryWrappedModal({
-  isOpen,
+function StoryWrappedContent({
   onClose,
   story,
   onOpenExportCard,
-}: StoryWrappedModalProps) {
+}: Omit<StoryWrappedModalProps, "isOpen">) {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(() => soundEngine.getMuted());
   const [progress, setProgress] = useState(0);
-
-  const totalSlides = 5;
-  const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const elapsedRef = useRef(0);
 
   const { repo, metrics, heatmap, contributors, milestones, languages } = story;
   const topContributor = contributors.topContributors[0];
@@ -57,90 +54,70 @@ export function StoryWrappedModal({
   const birthYear = new Date(repo.created_at).getFullYear();
 
   const fireConfetti = useCallback(() => {
-    confetti({
-      particleCount: 80,
-      spread: 70,
-      origin: { y: 0.6 },
-      colors: ["#6366f1", "#a855f7", "#ec4899", "#3b82f6", "#10b981"],
-    });
+    try {
+      void confetti({
+        particleCount: 80,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ["#6366f1", "#a855f7", "#ec4899", "#3b82f6", "#10b981"],
+      });
+    } catch {
+      // Ignore canvas-confetti errors in headless environments
+    }
   }, []);
 
-  // Handle slide advance
   const nextSlide = useCallback(() => {
     soundEngine.playSlideTransition();
-    setCurrentSlide((prev) => {
-      if (prev >= totalSlides - 1) {
-        return prev;
-      }
-      return prev + 1;
-    });
+    elapsedRef.current = 0;
     setProgress(0);
-  }, [totalSlides]);
+    setCurrentSlide((prev) => (prev >= TOTAL_SLIDES - 1 ? prev : prev + 1));
+  }, []);
 
   const prevSlide = useCallback(() => {
     soundEngine.playSlideTransition();
-    setCurrentSlide((prev) => Math.max(0, prev - 1));
+    elapsedRef.current = 0;
     setProgress(0);
+    setCurrentSlide((prev) => Math.max(0, prev - 1));
   }, []);
 
-  // Audio start/stop on open/close
   useEffect(() => {
-    if (isOpen) {
-      soundEngine.setMuted(isMuted);
-      soundEngine.startBgm();
-      soundEngine.playCelebrate();
-      fireConfetti();
-      setCurrentSlide(0);
-      setProgress(0);
-    } else {
-      soundEngine.stopBgm();
-    }
-
+    void soundEngine.startBgm();
     return () => {
       soundEngine.stopBgm();
     };
-  }, [isOpen, fireConfetti, isMuted]);
+  }, []);
 
-  // Slide-specific sound & effects
   useEffect(() => {
-    if (!isOpen) return;
-
     if (currentSlide === 0 || currentSlide === 4) {
       fireConfetti();
       soundEngine.playCelebrate();
     }
-  }, [currentSlide, isOpen, fireConfetti]);
+  }, [currentSlide, fireConfetti]);
 
-  // Progress tick loop
   useEffect(() => {
-    if (!isOpen || isPaused) return;
+    if (isPaused) return;
 
-    const intervalTime = 50;
-    const step = (intervalTime / SLIDE_DURATION_MS) * 100;
+    const intervalMs = 50;
+    const timer = setInterval(() => {
+      elapsedRef.current += intervalMs;
+      const pct = Math.min(100, (elapsedRef.current / SLIDE_DURATION_MS) * 100);
+      setProgress(pct);
 
-    progressTimerRef.current = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          if (currentSlide < totalSlides - 1) {
-            nextSlide();
-            return 0;
-          } else {
-            return 100;
-          }
-        }
-        return prev + step;
-      });
-    }, intervalTime);
+      if (elapsedRef.current >= SLIDE_DURATION_MS) {
+        elapsedRef.current = 0;
+        setCurrentSlide((prev) => {
+          if (prev >= TOTAL_SLIDES - 1) return prev;
+          soundEngine.playSlideTransition();
+          return prev + 1;
+        });
+        setProgress(0);
+      }
+    }, intervalMs);
 
-    return () => {
-      if (progressTimerRef.current) clearInterval(progressTimerRef.current);
-    };
-  }, [isOpen, isPaused, currentSlide, totalSlides, nextSlide]);
+    return () => clearInterval(timer);
+  }, [isPaused]);
 
-  // Keyboard navigation
   useEffect(() => {
-    if (!isOpen) return;
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
       if (e.key === " ") {
@@ -153,9 +130,7 @@ export function StoryWrappedModal({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose, nextSlide, prevSlide]);
-
-  if (!isOpen) return null;
+  }, [onClose, nextSlide, prevSlide]);
 
   const toggleMute = () => {
     const nextState = !isMuted;
@@ -164,26 +139,28 @@ export function StoryWrappedModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-xl animate-in fade-in select-none">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="wrapped-modal-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-xl select-none p-4"
+    >
       <div className="relative w-full max-w-lg h-[92vh] max-h-[820px] bg-gradient-to-b from-[#0e1322] via-[#090d16] to-[#04060a] border border-slate-700/60 rounded-3xl shadow-2xl flex flex-col justify-between overflow-hidden">
-        {/* Glow Effects */}
         <div className="absolute -top-32 -left-32 w-80 h-80 bg-brand-600/25 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-32 -right-32 w-80 h-80 bg-purple-600/20 rounded-full blur-3xl pointer-events-none" />
 
-        {/* Top Controls & Story Progress Bars */}
         <div className="relative z-20 px-6 pt-5 pb-3 space-y-3">
-          {/* Progress segments */}
-          <div className="flex items-center gap-1.5">
-            {Array.from({ length: totalSlides }).map((_, idx) => {
+          <div className="flex items-center gap-1.5" aria-hidden="true">
+            {Array.from({ length: TOTAL_SLIDES }).map((_, idx) => {
               let fillPct = 0;
               if (idx < currentSlide) fillPct = 100;
               else if (idx === currentSlide) fillPct = progress;
 
               return (
-                <div
-                  key={idx}
-                  className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden"
-                >
+                <div key={idx} className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                   <div
                     style={{ width: `${fillPct}%` }}
                     className="h-full bg-gradient-to-r from-brand-400 to-indigo-300 rounded-full transition-all duration-75"
@@ -193,10 +170,12 @@ export function StoryWrappedModal({
             })}
           </div>
 
-          {/* Top Bar with branding & sound */}
           <div className="flex items-center justify-between text-xs text-slate-300">
             <div className="flex items-center gap-2">
-              <span className="font-bold tracking-wider font-mono text-brand-300 flex items-center gap-1">
+              <span
+                id="wrapped-modal-title"
+                className="font-bold tracking-wider font-mono text-brand-300 flex items-center gap-1"
+              >
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>GITSTORY WRAPPED</span>
               </span>
@@ -206,9 +185,11 @@ export function StoryWrappedModal({
 
             <div className="flex items-center gap-1.5">
               <button
+                type="button"
                 onClick={toggleMute}
-                className="p-1.5 rounded-full hover:bg-slate-800/80 text-slate-300 hover:text-white transition-colors"
+                aria-label={isMuted ? "Unmute Synthwave BGM" : "Mute Sound"}
                 title={isMuted ? "Unmute Synthwave BGM" : "Mute Sound"}
+                className="p-1.5 rounded-full hover:bg-slate-800/80 text-slate-300 hover:text-white transition-colors"
               >
                 {isMuted ? (
                   <VolumeX className="w-4 h-4 text-slate-500" />
@@ -218,17 +199,21 @@ export function StoryWrappedModal({
               </button>
 
               <button
-                onClick={() => setIsPaused(!isPaused)}
-                className="p-1.5 rounded-full hover:bg-slate-800/80 text-slate-300 hover:text-white transition-colors"
+                type="button"
+                onClick={() => setIsPaused((p) => !p)}
+                aria-label={isPaused ? "Resume story" : "Pause story"}
                 title={isPaused ? "Resume" : "Pause"}
+                className="p-1.5 rounded-full hover:bg-slate-800/80 text-slate-300 hover:text-white transition-colors"
               >
                 {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
               </button>
 
               <button
+                type="button"
                 onClick={onClose}
-                className="p-1.5 rounded-full hover:bg-slate-800/80 text-slate-300 hover:text-white transition-colors"
+                aria-label="Close Wrapped modal"
                 title="Close Wrapped"
+                className="p-1.5 rounded-full hover:bg-slate-800/80 text-slate-300 hover:text-white transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -236,10 +221,8 @@ export function StoryWrappedModal({
           </div>
         </div>
 
-        {/* Center Interactive Slide Area */}
         <div className="relative z-10 flex-1 px-8 py-4 flex flex-col justify-center items-center text-center">
           <AnimatePresence mode="wait">
-            {/* Slide 1: Inception */}
             {currentSlide === 0 && (
               <motion.div
                 key="slide-0"
@@ -257,7 +240,7 @@ export function StoryWrappedModal({
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={repo.owner.avatar_url}
-                    alt={repo.owner.login}
+                    alt={`${repo.owner.login} avatar`}
                     className="w-24 h-24 rounded-3xl border-4 border-brand-500/30 mx-auto shadow-2xl"
                   />
                   <div className="absolute -bottom-2 -right-2 bg-brand-600 text-white p-1.5 rounded-xl shadow-lg">
@@ -275,7 +258,9 @@ export function StoryWrappedModal({
                 </div>
 
                 <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 text-left space-y-1">
-                  <span className="text-[10px] uppercase font-mono text-slate-500 font-bold">First Milestone</span>
+                  <span className="text-[10px] uppercase font-mono text-slate-500 font-bold">
+                    First Milestone
+                  </span>
                   <p className="text-xs text-slate-300 italic line-clamp-2">
                     &ldquo;{milestones[0]?.description || "Project initialized on GitHub."}&rdquo;
                   </p>
@@ -283,7 +268,6 @@ export function StoryWrappedModal({
               </motion.div>
             )}
 
-            {/* Slide 2: The Rhythm of Dev */}
             {currentSlide === 1 && (
               <motion.div
                 key="slide-1"
@@ -298,9 +282,7 @@ export function StoryWrappedModal({
                   <span>CHAPTER 2: CODE RHYTHM</span>
                 </div>
 
-                <h2 className="text-3xl font-extrabold text-white tracking-tight">
-                  The Vampire Shift
-                </h2>
+                <h2 className="text-3xl font-extrabold text-white tracking-tight">The Vampire Shift</h2>
 
                 <div className="grid grid-cols-2 gap-3 w-full max-w-sm mx-auto">
                   <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex flex-col items-center space-y-2">
@@ -333,7 +315,6 @@ export function StoryWrappedModal({
               </motion.div>
             )}
 
-            {/* Slide 3: Top Contributor Podium */}
             {currentSlide === 2 && (
               <motion.div
                 key="slide-2"
@@ -364,7 +345,7 @@ export function StoryWrappedModal({
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={topContributor.avatarUrl}
-                          alt={topContributor.login}
+                          alt={`${topContributor.login} avatar`}
                           className="w-20 h-20 rounded-full border-4 border-amber-400 shadow-md"
                         />
                       ) : (
@@ -390,7 +371,6 @@ export function StoryWrappedModal({
               </motion.div>
             )}
 
-            {/* Slide 4: Turning Points & Chaos */}
             {currentSlide === 3 && (
               <motion.div
                 key="slide-3"
@@ -423,7 +403,9 @@ export function StoryWrappedModal({
                       <Activity className="w-5 h-5 text-emerald-400 flex-shrink-0" />
                       <div>
                         <span className="text-xs font-bold text-white">Nonstop Momentum</span>
-                        <p className="text-[11px] text-slate-400">Zero long pauses recorded across {metrics.lifespanFormatted} of active development.</p>
+                        <p className="text-[11px] text-slate-400">
+                          Steady velocity across {metrics.lifespanFormatted} of active development.
+                        </p>
                       </div>
                     </div>
                   )}
@@ -451,7 +433,6 @@ export function StoryWrappedModal({
               </motion.div>
             )}
 
-            {/* Slide 5: The Grand Finale */}
             {currentSlide === 4 && (
               <motion.div
                 key="slide-4"
@@ -471,11 +452,11 @@ export function StoryWrappedModal({
                     {repo.name} Wrapped
                   </h2>
                   <p className="text-xs text-slate-400 font-mono">
-                    {metrics.lifespanFormatted} • {metrics.totalCommitsAnalyzed} Commits • {contributors.totalUniqueAuthors} Authors
+                    {metrics.lifespanFormatted} • {metrics.totalCommitCountEstimate.toLocaleString()} Commits •{" "}
+                    {contributors.totalUniqueAuthors} Authors
                   </p>
                 </div>
 
-                {/* Scorecard Box */}
                 <div className="p-4 rounded-2xl bg-gradient-to-tr from-slate-950 via-slate-900 to-[#1e1b4b] border border-slate-700/80 max-w-sm mx-auto space-y-3 shadow-2xl">
                   <div className="grid grid-cols-2 gap-2 text-center text-xs">
                     <div className="bg-slate-900/70 p-2.5 rounded-xl border border-slate-800">
@@ -496,11 +477,11 @@ export function StoryWrappedModal({
                   </div>
 
                   <div className="text-[11px] text-slate-300 font-medium">
-                    🏆 Project status: <strong className="text-brand-300">Legendary Open-Source Pillar</strong>
+                    Project status:{" "}
+                    <strong className="text-brand-300">Open-Source Chronicle Complete</strong>
                   </div>
                 </div>
 
-                {/* Action Buttons */}
                 <div className="flex items-center justify-center gap-2 pt-2">
                   <Button
                     variant="primary"
@@ -520,9 +501,9 @@ export function StoryWrappedModal({
           </AnimatePresence>
         </div>
 
-        {/* Bottom Nav Buttons (Prev & Next Click Zones) */}
         <div className="relative z-20 px-6 py-4 flex items-center justify-between border-t border-slate-800/80 bg-slate-950/40">
           <button
+            type="button"
             onClick={prevSlide}
             disabled={currentSlide === 0}
             className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
@@ -532,12 +513,13 @@ export function StoryWrappedModal({
           </button>
 
           <span className="text-xs font-mono text-slate-500 font-semibold">
-            {currentSlide + 1} / {totalSlides}
+            {currentSlide + 1} / {TOTAL_SLIDES}
           </span>
 
           <button
+            type="button"
             onClick={nextSlide}
-            disabled={currentSlide === totalSlides - 1}
+            disabled={currentSlide === TOTAL_SLIDES - 1}
             className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
             <span>Next</span>
@@ -549,3 +531,19 @@ export function StoryWrappedModal({
   );
 }
 
+export function StoryWrappedModal({
+  isOpen,
+  onClose,
+  story,
+  onOpenExportCard,
+}: StoryWrappedModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <StoryWrappedContent
+      onClose={onClose}
+      story={story}
+      onOpenExportCard={onOpenExportCard}
+    />
+  );
+}

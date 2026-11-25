@@ -2,15 +2,9 @@
 
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import {
-  AlertCircle,
-  RefreshCw,
-  ArrowLeft,
-  Clock,
-  Sparkles,
-  Zap,
-} from "lucide-react";
+import { AlertCircle, RefreshCw, ArrowLeft, Clock } from "lucide-react";
 import { RepoStoryPayload } from "@/lib/analytics/types";
+import { downloadStoryJson } from "@/lib/export/download";
 import { StoryHeader } from "@/components/story/StoryHeader";
 import { StoryNarrative } from "@/components/story/StoryNarrative";
 import { TimelineView } from "@/components/story/TimelineView";
@@ -20,15 +14,52 @@ import { LanguageBreakdown } from "@/components/story/LanguageBreakdown";
 import { MilestoneBadges } from "@/components/story/MilestoneBadges";
 import { ExportModal } from "@/components/story/ExportModal";
 import { StoryWrappedModal } from "@/components/story/StoryWrappedModal";
+import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 
-export default function StoryPage() {
-  const params = useParams();
-  const router = useRouter();
+interface StoryFetchResult {
+  story: RepoStoryPayload | null;
+  error: { message: string; type?: string; resetAt?: string } | null;
+}
 
-  const owner = params?.owner as string;
-  const repo = params?.repo as string;
+async function loadRepoStory(owner: string, repo: string, refresh: boolean): Promise<StoryFetchResult> {
+  try {
+    const url = `/api/story?repo=${encodeURIComponent(`${owner}/${repo}`)}${
+      refresh ? "&refresh=true" : ""
+    }`;
+    const res = await fetch(url);
+    const json = (await res.json()) as {
+      error?: string;
+      type?: string;
+      resetAt?: string;
+      data?: RepoStoryPayload;
+    };
+
+    if (!res.ok || !json.data) {
+      return {
+        story: null,
+        error: {
+          message: json.error || "Failed to load repository story.",
+          type: json.type,
+          resetAt: json.resetAt,
+        },
+      };
+    }
+
+    return { story: json.data, error: null };
+  } catch (err) {
+    return {
+      story: null,
+      error: {
+        message: err instanceof Error ? err.message : "Network error occurred while fetching story.",
+      },
+    };
+  }
+}
+
+function StoryView({ owner, repo }: { owner: string; repo: string }) {
+  const router = useRouter();
 
   const [story, setStory] = useState<RepoStoryPayload | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,65 +68,36 @@ export default function StoryPage() {
   const [isWrappedModalOpen, setIsWrappedModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const fetchStory = async (refresh = false) => {
-    if (!owner || !repo) return;
-
-    try {
-      if (refresh) setIsRefreshing(true);
-      else setIsLoading(true);
-      setError(null);
-
-      const url = `/api/story?repo=${encodeURIComponent(`${owner}/${repo}`)}${refresh ? "&refresh=true" : ""}`;
-      const res = await fetch(url);
-      const json = await res.json();
-
-      if (!res.ok) {
-        setError({
-          message: json.error || "Failed to load repository story.",
-          type: json.type,
-          resetAt: json.resetAt,
-        });
-        setStory(null);
-        return;
-      }
-
-      setStory(json.data);
-    } catch (err) {
-      setError({
-        message: err instanceof Error ? err.message : "Network error occurred while fetching story.",
-      });
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  };
-
   useEffect(() => {
-    fetchStory();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let cancelled = false;
+    void loadRepoStory(owner, repo, false).then((result) => {
+      if (cancelled) return;
+      setStory(result.story);
+      setError(result.error);
+      setIsLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [owner, repo]);
 
-  const handleDownloadJson = () => {
-    if (!story) return;
-    const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
-      JSON.stringify(story, null, 2)
-    )}`;
-    const link = document.createElement("a");
-    link.href = jsonString;
-    link.download = `gitstory-${owner}-${repo}.json`;
-    link.click();
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    setError(null);
+    const result = await loadRepoStory(owner, repo, true);
+    setStory(result.story);
+    setError(result.error);
+    setIsLoading(false);
+    setIsRefreshing(false);
   };
 
-  // Loading skeleton screen
   if (isLoading) {
     return (
-      <div className="space-y-8 animate-in fade-in">
-        {/* Back Link */}
+      <div className="space-y-8" aria-busy="true" aria-label="Loading repository story">
         <div className="flex items-center gap-2">
           <Skeleton className="h-9 w-28 rounded-lg" />
         </div>
 
-        {/* Header Skeleton */}
         <div className="p-8 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
           <div className="flex items-center gap-4">
             <Skeleton className="w-16 h-16 rounded-2xl" />
@@ -111,10 +113,8 @@ export default function StoryPage() {
           </div>
         </div>
 
-        {/* Narrative Skeleton */}
         <Skeleton className="h-72 w-full rounded-2xl" />
 
-        {/* Charts Skeletons */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <Skeleton className="h-96 w-full rounded-2xl" />
           <Skeleton className="h-96 w-full rounded-2xl" />
@@ -123,7 +123,6 @@ export default function StoryPage() {
     );
   }
 
-  // Error state
   if (error) {
     return (
       <div className="py-16 flex flex-col items-center justify-center text-center space-y-6 max-w-xl mx-auto">
@@ -132,7 +131,7 @@ export default function StoryPage() {
         </div>
 
         <div className="space-y-2">
-          <h2 className="text-2xl font-bold text-white tracking-tight">
+          <h1 className="text-2xl font-bold text-white tracking-tight">
             {error.type === "RATE_LIMIT_EXCEEDED"
               ? "GitHub API Rate Limit Reached"
               : error.type === "NOT_FOUND"
@@ -140,10 +139,8 @@ export default function StoryPage() {
               : error.type === "EMPTY_REPO"
               ? "Repository is Empty"
               : "Unable to Analyze Repository"}
-          </h2>
-          <p className="text-sm text-slate-400 leading-relaxed">
-            {error.message}
-          </p>
+          </h1>
+          <p className="text-sm text-slate-400 leading-relaxed">{error.message}</p>
         </div>
 
         {error.type === "RATE_LIMIT_EXCEEDED" && error.resetAt && (
@@ -159,7 +156,7 @@ export default function StoryPage() {
             <span>Search Another</span>
           </Button>
 
-          <Button variant="primary" size="md" onClick={() => fetchStory(true)}>
+          <Button variant="primary" size="md" isLoading={isRefreshing} onClick={() => void handleRefresh()}>
             <RefreshCw className="w-4 h-4 mr-1.5" />
             <span>Try Again</span>
           </Button>
@@ -171,8 +168,7 @@ export default function StoryPage() {
   if (!story) return null;
 
   return (
-    <div className="space-y-10 animate-in fade-in pb-16">
-      {/* Navigation and Refresh Bar */}
+    <div className="space-y-10 pb-16">
       <div className="flex items-center justify-between">
         <Button
           variant="ghost"
@@ -189,7 +185,7 @@ export default function StoryPage() {
             variant="outline"
             size="sm"
             isLoading={isRefreshing}
-            onClick={() => fetchStory(true)}
+            onClick={() => void handleRefresh()}
             title="Bypass cache and pull latest data"
           >
             <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
@@ -198,46 +194,43 @@ export default function StoryPage() {
         </div>
       </div>
 
-      {/* 1. Header Overview Card */}
       <StoryHeader
         story={story}
         onOpenExportModal={() => setIsExportModalOpen(true)}
-        onDownloadJson={handleDownloadJson}
+        onDownloadJson={() => downloadStoryJson(story)}
         onOpenWrappedModal={() => setIsWrappedModalOpen(true)}
       />
 
-      {/* 2. AI / Template Narrative Reader */}
-      <StoryNarrative
-        initialNarrative={story.narrative}
-        storyPayload={story}
-      />
+      <ErrorBoundary fallbackTitle="Narrative view failed to render">
+        <StoryNarrative initialNarrative={story.narrative} storyPayload={story} />
+      </ErrorBoundary>
 
-      {/* 3. Milestone Accolades Badges */}
-      <MilestoneBadges story={story} />
+      <ErrorBoundary fallbackTitle="Badges view failed to render">
+        <MilestoneBadges story={story} />
+      </ErrorBoundary>
 
-      {/* 4. Animated Milestone Timeline */}
-      <TimelineView
-        milestones={story.milestones}
-        repoFullName={story.repo.full_name}
-      />
+      <ErrorBoundary fallbackTitle="Milestone timeline failed to render">
+        <TimelineView milestones={story.milestones} repoFullName={story.repo.full_name} />
+      </ErrorBoundary>
 
-      {/* 5. Contributor Bar Race Chart */}
-      <ContributorRace timeline={story.contributors} />
+      <ErrorBoundary fallbackTitle="Contributor chart failed to render">
+        <ContributorRace timeline={story.contributors} />
+      </ErrorBoundary>
 
-      {/* 6. Heatmaps: 52-Week Calendar & 24x7 Punchcard */}
-      <ActivityHeatmap heatmap={story.heatmap} />
+      <ErrorBoundary fallbackTitle="Activity heatmap failed to render">
+        <ActivityHeatmap heatmap={story.heatmap} />
+      </ErrorBoundary>
 
-      {/* 7. Languages & Architecture Breakdown */}
-      <LanguageBreakdown data={story.languages} />
+      <ErrorBoundary fallbackTitle="Language breakdown failed to render">
+        <LanguageBreakdown data={story.languages} />
+      </ErrorBoundary>
 
-      {/* Export / Social Card Modal */}
       <ExportModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
         story={story}
       />
 
-      {/* Spotify Wrapped Story Recap Mode */}
       <StoryWrappedModal
         isOpen={isWrappedModalOpen}
         onClose={() => setIsWrappedModalOpen(false)}
@@ -248,3 +241,14 @@ export default function StoryPage() {
   );
 }
 
+export default function StoryPage() {
+  const params = useParams();
+  const owner = typeof params?.owner === "string" ? params.owner : "";
+  const repo = typeof params?.repo === "string" ? params.repo : "";
+
+  if (!owner || !repo) {
+    return null;
+  }
+
+  return <StoryView key={`${owner}/${repo}`} owner={owner} repo={repo} />;
+}
