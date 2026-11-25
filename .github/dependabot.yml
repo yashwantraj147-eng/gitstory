@@ -4,9 +4,19 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      npm-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # eslint-config-next 16.x requires eslint ^9 and typescript <6
+      - dependency-name: "eslint"
+        versions: [">=10.0.0"]
+      - dependency-name: "typescript"
+        versions: [">=6.0.0"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
-
